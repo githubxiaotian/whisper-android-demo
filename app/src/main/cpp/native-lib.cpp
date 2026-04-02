@@ -63,36 +63,40 @@ Java_com_example_whisperdemo_WhisperService_transcribe(JNIEnv *env, jobject thiz
     // 应用音频预处理
     LOGI("Applying audio preprocessing...");
     
-    // 1. 音量归一化
+    // 仅保留基础的音量归一化，移除其他滤镜
     normalizeAudio(pcmf32);
     
-    // 2. 高通滤波去除低频噪音
-    highPassFilter(pcmf32, 80.0f, sample_rate);
+    // 轻度高通滤波，去除极低频噪音（可选）
+    // highPassFilter(pcmf32, 80.0f, sample_rate);
     
-    // 3. 频谱减法降噪
-    spectralSubtractionDenoise(pcmf32, sample_rate);
-    
-    // 4. 语音增强
-    voiceEnhancementFilter(pcmf32, sample_rate);
-    
-    // 5. 自适应噪音门
-    adaptiveNoiseGate(pcmf32, 0.05f);
+    // 删除以下重度处理滤镜，避免破坏 TTS 音频质量
+    // spectralSubtractionDenoise(pcmf32, sample_rate);
+    // voiceEnhancementFilter(pcmf32, sample_rate);
+    // adaptiveNoiseGate(pcmf32, 0.05f);
     
     LOGI("Audio preprocessing completed, processed %zu samples", pcmf32.size());
     
     // Create whisper parameters
-    struct whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+    struct whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
     wparams.print_realtime   = false;
     wparams.print_progress   = false;
     wparams.print_timestamps = false;
     wparams.print_special    = false;
     wparams.translate        = false;
-    wparams.language         = "zh";  // Chinese language
+    wparams.language         = "en";
     wparams.n_threads        = 4;
     wparams.offset_ms        = 0;
     wparams.no_context       = true;
     wparams.single_segment   = false;
     
+    // 添加初始提示（Prompt），帮助模型理解上下文
+    // 可以提示模型注意时间格式和专业术语
+    // wparams.initial_prompt = "Clean Area, time schedule, from AM to PM";
+
+    // 如果识别仍然不准确，可以尝试使用 Beam Search（更准确但更慢）
+    // struct whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
+    // wparams.beam_size = 5;  // 束宽，越大越准确但越慢
+
     // Process audio
     if (whisper_full(g_whisper_context, wparams, pcmf32.data(), pcmf32.size()) != 0) {
         LOGE("Whisper transcription failed");
